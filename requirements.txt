@@ -1,0 +1,7 @@
+langgraph>=1.0
+langchain>=1.0
+langchain-ollama>=0.2
+langchain-mcp-adapters>=0.1
+mcp>=1.9
+python-dotenv>=1.0
+requests>=2.31
