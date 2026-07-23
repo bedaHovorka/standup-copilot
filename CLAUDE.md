@@ -43,8 +43,16 @@ Desktop, an IDE, another framework) could use the same servers.
   over HTTPS) is added only when `GITHUB_PAT` is set, so the project runs fully
   offline without it. **Extend the agent by adding entries here.**
 - `build_agent()` — pulls tools from all servers, builds a `create_agent`
-  ReAct loop over `ChatOllama`, with an `InMemorySaver` checkpointer for multi-turn
-  memory. Swap `ChatOllama` for any tool-calling LangChain model to change the LLM.
+  ReAct loop over `ChatOllama`, with an `AsyncSqliteSaver` checkpointer
+  (`data/checkpoints.db`, separate from `memory.db`) for multi-turn memory that
+  survives process restarts. Swap `ChatOllama` for any tool-calling LangChain
+  model to change the LLM. The sync `SqliteSaver` isn't an option here — it
+  raises `NotImplementedError` on `aget_tuple`/`aput`, and every call site in
+  this codebase (`agent.ainvoke`/`agent.astream`) is async-only. The returned
+  agent carries `agent.checkpoint_conn`; callers **must**
+  `await agent.checkpoint_conn.close()` before their coroutine returns (see
+  `main.py`/`daily_summary.py`), otherwise aiosqlite's background thread logs
+  a spurious "Event loop is closed" traceback at interpreter shutdown.
 - `SYSTEM_PROMPT` encodes the standup workflow and the rule to log "expectations"
   (things expected *from the user*) whenever they surface in conversation.
 
@@ -68,7 +76,15 @@ revert it to returning a raw connection object. The schema itself lives in `db/i
 Formatted SQL changelog for future compatibility with real `liquibase update`
 runs, but currently just applied by `memory_dao.get_connection()` via
 `executescript()` on every connection — idempotent (`CREATE TABLE IF NOT
-EXISTS`), so there's no separate migration step to run.
+EXISTS`), so there's no separate migration step to run. `expectations.status`
+has an index (`idx_expectations_status`, changeset 6) since it's filtered in
+both `list_expectations` and `list_due_candidates`; the other four tables'
+primary keys already cover every query pattern in `memory_dao.py`, so they
+intentionally have no extra indexes — don't add one without a real query to
+back it. `db/checkpoints_init.sql` is a separate, **non-executed**
+Liquibase file documenting the checkpointer's own schema (`checkpoints`,
+`writes`) — that schema is actually owned and created by
+`AsyncSqliteSaver.setup()` in `agent/graph.py`, not by this DAO or `init.sql`.
 
 **Entrypoints:**
 - `main.py` — CLI chat loop; streams each tool call/result so you can watch the

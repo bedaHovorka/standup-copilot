@@ -43,51 +43,56 @@ BANNER = """
 
 async def chat(standup_mode: bool = False) -> None:
     agent = await build_agent()
-    config = {
-        "configurable": {"thread_id": str(uuid.uuid4())},
-        "recursion_limit": 40,
-    }
-    print(BANNER)
+    try:
+        config = {
+            "configurable": {"thread_id": str(uuid.uuid4())},
+            "recursion_limit": 40,
+        }
+        print(BANNER)
 
-    if standup_mode:
-        today = date.today()
-        now = datetime.now()
-        since, _ = load_cutoff(today)
-        print(f"Preparing your standup report (window since {since:%Y-%m-%d %H:%M})...\n")
-        summary = await generate_report(agent, now, since, config)
-        print(summary)
-        archive_report(today, since, summary)
-        save_cutoff(today)
-        print("\n[report archived, cutoff advanced]")
-        print("Now tell me what you hear at the standup - I'll remember what's")
-        print("expected from you (e.g. 'Petr wants me to review PR #42 by Thursday').\n")
+        if standup_mode:
+            today = date.today()
+            now = datetime.now()
+            since, _ = load_cutoff(today)
+            print(f"Preparing your standup report (window since {since:%Y-%m-%d %H:%M})...\n")
+            summary = await generate_report(agent, now, since, config)
+            print(summary)
+            archive_report(today, since, summary)
+            save_cutoff(today)
+            print("\n[report archived, cutoff advanced]")
+            print("Now tell me what you hear at the standup - I'll remember what's")
+            print("expected from you (e.g. 'Petr wants me to review PR #42 by Thursday').\n")
 
-    while True:
-        try:
-            user_input = input("you > ").strip()
-        except (KeyboardInterrupt, EOFError):
-            print("\nBye!")
-            return
-        if not user_input:
-            continue
-        if user_input.lower() in {"exit", "quit"}:
-            print("Bye!")
-            return
+        while True:
+            try:
+                user_input = input("you > ").strip()
+            except (KeyboardInterrupt, EOFError):
+                print("\nBye!")
+                return
+            if not user_input:
+                continue
+            if user_input.lower() in {"exit", "quit"}:
+                print("Bye!")
+                return
 
-        async for event in agent.astream(
-            {"messages": [HumanMessage(content=user_input)]},
-            config=config,
-            stream_mode="values",
-        ):
-            msg = event["messages"][-1]
-            if isinstance(msg, AIMessage) and msg.tool_calls:
-                for tc in msg.tool_calls:
-                    print(f"  [tool call] {tc['name']}({tc['args']})")
-            elif isinstance(msg, ToolMessage):
-                preview = str(msg.content).replace("\n", " ")[:120]
-                print(f"  [tool result] {preview}")
-            elif isinstance(msg, AIMessage) and msg.content:
-                print(f"\nagent > {msg.content}\n")
+            async for event in agent.astream(
+                {"messages": [HumanMessage(content=user_input)]},
+                config=config,
+                stream_mode="values",
+            ):
+                msg = event["messages"][-1]
+                if isinstance(msg, AIMessage) and msg.tool_calls:
+                    for tc in msg.tool_calls:
+                        print(f"  [tool call] {tc['name']}({tc['args']})")
+                elif isinstance(msg, ToolMessage):
+                    preview = str(msg.content).replace("\n", " ")[:120]
+                    print(f"  [tool result] {preview}")
+                elif isinstance(msg, AIMessage) and msg.content:
+                    print(f"\nagent > {msg.content}\n")
+    finally:
+        # Must close before this coroutine returns and asyncio.run() tears
+        # down the event loop - see agent/graph.py build_agent().
+        await agent.checkpoint_conn.close()
 
 
 if __name__ == "__main__":

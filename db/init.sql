@@ -41,3 +41,6 @@ CREATE TABLE IF NOT EXISTS reminders (
     expectation_id INTEGER PRIMARY KEY,
     last_reminded TEXT NOT NULL
 );
+
+--changeset standup-copilot:6
+CREATE INDEX IF NOT EXISTS idx_expectations_status ON expectations(status);

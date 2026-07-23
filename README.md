@@ -17,7 +17,7 @@ The assignment suggested considering MCP — this project takes that route delib
 ```
 ┌────────────┐   messages    ┌─────────────────────────────┐
 │    CLI     │ ────────────► │   LangGraph ReAct agent     │
-│  main.py   │ ◄──────────── │  (Ollama + InMemorySaver)   │
+│  main.py   │ ◄──────────── │ (Ollama + AsyncSqliteSaver) │
 └────────────┘               └─────────────┬───────────────┘
                                            │ MCP (stdio)
                                            ▼
@@ -35,7 +35,7 @@ The assignment suggested considering MCP — this project takes that route delib
                              └─────────────────────────────┘
 ```
 
-The agent runs the classic ReAct loop built by `create_agent`: the model decides whether to answer or call a tool, tool results are fed back as messages, and the loop repeats until the model produces a final answer. `InMemorySaver` + a `thread_id` give it multi-turn conversation memory. In `main.py --standup`, the standup report and the note-taking chat that follows it share the same `thread_id`, so you can refer back to what the report said.
+The agent runs the classic ReAct loop built by `create_agent`: the model decides whether to answer or call a tool, tool results are fed back as messages, and the loop repeats until the model produces a final answer. An `AsyncSqliteSaver` checkpointer (`data/checkpoints.db`) + a `thread_id` give it multi-turn conversation memory that survives process restarts. In `main.py --standup`, the standup report and the note-taking chat that follows it share the same `thread_id`, so you can refer back to what the report said.
 
 ## Tools
 
@@ -166,8 +166,9 @@ standup-copilot/
 │   ├── memory_server.py    # FastMCP server: MCP tool contracts
 │   └── memory_dao.py       # all SQL for data/memory.db
 ├── db/
-│   └── init.sql            # memory.db schema (Liquibase Formatted SQL)
-├── data/                   # memory.db + summaries/ (auto-created)
+│   ├── init.sql             # memory.db schema (Liquibase Formatted SQL)
+│   └── checkpoints_init.sql # checkpoints.db schema, docs-only (AsyncSqliteSaver owns it)
+├── data/                   # memory.db + checkpoints.db + summaries/ (auto-created)
 ├── watcher.py              # daytime reminder loop (no LLM)
 ├── daily_summary.py        # headless scheduled standup report
 ├── pyproject.toml          # uv project definition (uv sync / uv run)

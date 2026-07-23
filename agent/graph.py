@@ -5,7 +5,8 @@ Flow:
   MultiServerMCPClient spawns server/memory_server.py over stdio,
   discovers its tools, and converts them into LangChain tools.
   create_agent then builds the standard  agent -> tools -> agent  loop
-  with an in-memory checkpointer for multi-turn conversation memory.
+  with a SQLite-backed checkpointer (data/checkpoints.db) for multi-turn
+  conversation memory that survives process restarts.
 """
 
 from __future__ import annotations
@@ -14,13 +15,15 @@ import os
 import sys
 from pathlib import Path
 
+import aiosqlite
 from langchain.agents import create_agent
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_ollama import ChatOllama
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MEMORY_SERVER = PROJECT_ROOT / "server" / "memory_server.py"
+CHECKPOINT_DB_PATH = PROJECT_ROOT / "data" / "checkpoints.db"
 
 SYSTEM_PROMPT = """You are a developer standup copilot with tools via MCP.
 
@@ -99,9 +102,23 @@ async def build_agent():
         temperature=0,
     )
 
-    return create_agent(
+    # Not `async with AsyncSqliteSaver.from_conn_string(...)` - that would
+    # close the connection as soon as this function returns, before the
+    # caller ever uses the agent. Keep it open for the agent's lifetime.
+    CHECKPOINT_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = await aiosqlite.connect(CHECKPOINT_DB_PATH)
+    checkpointer = AsyncSqliteSaver(conn)
+    await checkpointer.setup()
+
+    agent = create_agent(
         model=model,
         tools=tools,
         system_prompt=SYSTEM_PROMPT,
-        checkpointer=InMemorySaver(),
+        checkpointer=checkpointer,
     )
+    # aiosqlite runs a background thread that must be told to stop before
+    # the event loop closes, or it logs a spurious "Event loop is closed"
+    # traceback on interpreter shutdown. Callers must await
+    # agent.checkpoint_conn.close() before their coroutine returns.
+    agent.checkpoint_conn = conn
+    return agent
