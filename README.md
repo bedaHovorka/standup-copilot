@@ -66,6 +66,28 @@ uv run main.py --standup    # standup session
 
 The MCP server is spawned automatically over stdio — you don't start it separately.
 
+### GitHub PAT permissions
+
+`GITHUB_PAT` is optional — leave it empty to run fully offline (memory tools
+only). If you set it, create a **fine-grained** PAT at
+[github.com/settings/tokens?type=beta](https://github.com/settings/tokens?type=beta),
+scoped only to the repos you'll `track_repo`, with these **repository
+permissions set to Read-only** (this project never opens PRs, creates issues,
+or triggers workflows — read access is all the `/readonly` endpoint's tools need):
+
+| Permission | Why |
+|---|---|
+| Contents | commits |
+| Issues | assigned/tracked issues |
+| Pull requests | open/recent PRs |
+| Commit statuses | per-commit CI status |
+| Actions | workflow run / CI status |
+| Metadata | required baseline, auto-included on every fine-grained PAT |
+
+Don't grant Write on any of these. The `/readonly` MCP endpoint already
+excludes write-capable tools server-side, but scoping the token itself to
+read-only is a second, independent layer of defense in depth.
+
 ## Example session
 
 ```

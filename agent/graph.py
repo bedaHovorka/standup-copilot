@@ -33,6 +33,11 @@ MEMORY tools (local SQLite - the user's long-term memory):
 GITHUB tools (remote MCP, available when GITHUB_PAT is configured):
 - live repository data: issues, pull requests, commits, CI status
 
+GitHub tools are not limited to standup preparation: whenever the user directly
+asks about recent commits, pull requests, issues, or CI status (in or outside a
+standup), call the GitHub tools if they are available, rather than only listing
+tracked repos from memory.
+
 Standup workflow when the user asks to prepare a standup:
 1. list_tracked_repos and get_recent_standups to load context from memory
 2. If GitHub tools are available, fetch recent activity (commits, PRs,
